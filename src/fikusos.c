@@ -419,7 +419,7 @@ void execute_memory() {
     int_to_str(free_memory_kb, free_str);
     int_to_str(TOTAL_MEMORY_KB, total_str);
     
-    terminal_writestring("\nMemory Usage:\n");
+    terminal_writestring("Memory Usage:\n");
     terminal_writestring("Total: ");
     terminal_writestring(total_str);
     terminal_writestring(" KB\n");
@@ -432,7 +432,7 @@ void execute_memory() {
 }
 
 void execute_disk() {
-    terminal_writestring("\nDisk Information:\n");
+    terminal_writestring("Disk Information:\n");
     terminal_writestring("----------------------------------------\n");
     
     for (int i = 0; i < disk_count; i++) {
@@ -477,7 +477,6 @@ void execute_pwd() {
 }
 
 void execute_echo(char* args[], int arg_count) {
-    terminal_writestring("\n");
     for (int i = 1; i < arg_count; i++) {
         terminal_writestring(args[i]);
         terminal_writestring(" ");
@@ -510,7 +509,7 @@ void execute_date() {
     int_to_str(month, month_str);
     int_to_str(year + 2000, year_str);
     
-    terminal_writestring("\nSystem Time: ");
+    terminal_writestring("System Time: ");
     terminal_writestring(day_str);
     terminal_writestring("/");
     terminal_writestring(month_str);
@@ -526,11 +525,11 @@ void execute_date() {
 }
 
 void execute_whoami() {
-    terminal_writestring("\nlol\n");
+    terminal_writestring("lol\n");
 }
 
 void execute_uptime() {
-    terminal_writestring("\n22 s.\n");
+    terminal_writestring("22 s.\n");
 }
 
 void execute_kptest() {
@@ -538,7 +537,7 @@ void execute_kptest() {
 }
 
 void execute_poweroff() {
-    terminal_writestring("\nSystem is shutting down...\n");
+    terminal_writestring("System is shutting down...\n");
     outw(0x604, 0x2000);
     outw(0xB004, 0x2000);
     outw(0x4004, 0x3400);
@@ -547,7 +546,7 @@ void execute_poweroff() {
 }
 
 void execute_reboot() {
-    terminal_writestring("\nSystem is rebooting...\n");
+    terminal_writestring("System is rebooting...\n");
     outb(0x64, 0xFE);
     asm volatile ("cli");
     asm volatile ("int $0xFF");
@@ -618,7 +617,6 @@ void show_ascii_art() {
 }
 
 void execute_about() {
-    terminal_writestring("\n");
     show_ascii_art();
     terminal_writestring("OS: FikusOS\n");
     terminal_writestring("License: GNU GPL 2\n");
@@ -646,24 +644,24 @@ void execute_command(char* cmd) {
     if (arg_count == 0) return;
     
     if (str_cmp(args[0], "help") == 0) {
-        terminal_writestring("\nAvailable commands:\n");
+        terminal_writestring("Available commands:\n");
         terminal_writestring("help     - Show this help\n");
-        terminal_writestring("clear    - Clear screen\n");
+        terminal_writestring("cls      - Clear screen\n");
         terminal_writestring("about    - Show system info\n");
         terminal_writestring("color    - Change background color\n");
         terminal_writestring("fino     - Text editor\n");
-        terminal_writestring("ls       - List files\n");
+        terminal_writestring("dir      - List files\n");
         terminal_writestring("pwd      - Print working directory\n");
         terminal_writestring("echo     - Display message\n");
         terminal_writestring("date     - Show current date/time\n");
         terminal_writestring("whoami   - Show current user\n");
-        terminal_writestring("memory   - Show memory usage\n");
+        terminal_writestring("mem      - Show memory usage\n");
         terminal_writestring("disk     - Show disk information\n");
         terminal_writestring("poweroff - Shut down\n");
         terminal_writestring("reboot   - Reboot\n");
         terminal_writestring("kptest   - Test kernel panic\n");
     }
-    else if (str_cmp(args[0], "clear") == 0) {
+    else if (str_cmp(args[0], "cls") == 0) {
         terminal_clear();
     }
     else if (str_cmp(args[0], "about") == 0) {
@@ -676,7 +674,7 @@ void execute_command(char* cmd) {
     else if (str_cmp(args[0], "fino") == 0) {
         execute_fino();
     }
-    else if (str_cmp(args[0], "ls") == 0) {
+    else if (str_cmp(args[0], "dir") == 0) {
         execute_ls();
     }
     else if (str_cmp(args[0], "pwd") == 0) {
@@ -694,7 +692,7 @@ void execute_command(char* cmd) {
     else if (str_cmp(args[0], "uptime") == 0) {
         execute_uptime();
     }
-    else if (str_cmp(args[0], "memory") == 0) {
+    else if (str_cmp(args[0], "mem") == 0) {
         execute_memory();
     }
     else if (str_cmp(args[0], "disk") == 0 || str_cmp(args[0], "data") == 0) {
