@@ -285,6 +285,17 @@ void kernel_panic() {
     
     terminal_writestring("\n\nKERNEL PANIC!\n");
     terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
     
     while (1) {
         asm volatile ("cli; hlt");
@@ -622,7 +633,7 @@ void execute_about() {
     terminal_writestring("License: GNU GPL 2\n");
     terminal_writestring("Created for FikusPI\n");
     terminal_writestring("Shell: FKShell\n");
-    terminal_writestring("Kernel: Fikus (Srunix fork)\n");
+    terminal_writestring("Kernel: Fikus\n");
     terminal_writestring("\n");
 }
 
