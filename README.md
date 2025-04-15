@@ -14,3 +14,4 @@ Initially, there was a Srunix core, which was developed by the main developer of
 Will there be a GUI for FikusOS? Answer: Officially - no, but you can always create your own fork and add your own GUI there. FikusOS aims to make users nostalgic for DOS.
 
 # We will be glad to any support from your side, you can take part in the development by writing to the author! Thank you for participating in the FikusOS project!
+
