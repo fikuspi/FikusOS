@@ -1,4 +1,4 @@
-![default_fikus](https://github.com/user-attachments/assets/e59adc4a-78d3-43c1-96ce-87383a76c4a4)
+![изображение](https://github.com/user-attachments/assets/960326d3-5302-446b-b020-357b425fe36d)
 
 # FikusOS - Free simple DOS-like OS.
 
