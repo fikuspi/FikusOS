@@ -32,6 +32,11 @@
 #define KEY_DOWN      0x50
 #define KEY_LEFT      0x4B
 #define KEY_RIGHT     0x4D
+#define KEY_LSHIFT    0x2A
+#define KEY_RSHIFT    0x36
+#define KEY_CTRL      0x1D
+#define KEY_ALT       0x38
+#define KEY_CAPSLOCK  0x3A
 
 #define MOUSE_ENABLE  0xA8
 #define MOUSE_WRITE   0xD4
@@ -42,6 +47,38 @@ void terminal_initialize();
 void terminal_clear();
 void terminal_putchar(char c);
 void terminal_writestring(const char* data);
+void terminal_setcolor(uint8_t fg, uint8_t bg);
+void terminal_write(const char* data, size_t size);
+void terminal_scroll();
+uint8_t cmos_read(uint8_t reg);
+int bcd_to_bin(int bcd);
+char keyboard_getchar();
+void init_timer();
+void mouse_wait(uint8_t type);
+void mouse_write(uint8_t data);
+uint8_t mouse_read();
+void mouse_init();
+void kernel_panic();
+void execute_fino();
+void execute_color(char* color);
+void execute_memory();
+void execute_disk();
+void execute_ls();
+void execute_pwd();
+void execute_echo(char* args[], int arg_count);
+void execute_date();
+void execute_whoami();
+void execute_uptime();
+void execute_kptest();
+void execute_poweroff();
+void execute_reboot();
+void execute_opengwm();
+void show_ascii_art();
+void execute_about();
+void execute_command(char* cmd);
+void print_prompt();
+void wait_for_enter();
+void shell();
 
 static inline void outb(uint16_t port, uint8_t val) {
     asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -82,8 +119,18 @@ static size_t str_len(const char* str) {
     return len;
 }
 
-static int str_cmp(const char* s1, const char* s2) {
-    while (*s1 && (*s1 == *s2)) { s1++; s2++; }
+static int str_cmp_case_insensitive(const char* s1, const char* s2) {
+    while (*s1 && *s2) {
+        char c1 = *s1;
+        char c2 = *s2;
+        
+        if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
+        if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
+        
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+    }
     return *(const unsigned char*)s1 - *(const unsigned char*)s2;
 }
 
@@ -119,6 +166,11 @@ size_t terminal_row = 0;
 size_t terminal_column = 0;
 uint8_t terminal_color = 0;
 volatile uint16_t* terminal_buffer = 0;
+
+bool shift_pressed = false;
+bool ctrl_pressed = false;
+bool alt_pressed = false;
+bool caps_lock = false;
 
 void terminal_setcolor(uint8_t fg, uint8_t bg) {
     terminal_color = (bg << 4) | (fg & 0x0F);
@@ -215,6 +267,32 @@ char keyboard_getchar() {
         if (inb(0x64) & 0x01) {
             uint8_t scancode = inb(0x60);
             
+            if (scancode & 0x80) {
+                uint8_t released_key = scancode & 0x7F;
+                if (released_key == KEY_LSHIFT || released_key == KEY_RSHIFT) {
+                    shift_pressed = false;
+                } else if (released_key == KEY_CTRL) {
+                    ctrl_pressed = false;
+                } else if (released_key == KEY_ALT) {
+                    alt_pressed = false;
+                }
+                continue;
+            }
+            
+            if (scancode == KEY_LSHIFT || scancode == KEY_RSHIFT) {
+                shift_pressed = true;
+                continue;
+            } else if (scancode == KEY_CTRL) {
+                ctrl_pressed = true;
+                continue;
+            } else if (scancode == KEY_ALT) {
+                alt_pressed = true;
+                continue;
+            } else if (scancode == KEY_CAPSLOCK) {
+                caps_lock = !caps_lock;
+                continue;
+            }
+            
             if (scancode == 0xE0) {
                 scancode = inb(0x60);
                 switch(scancode) {
@@ -228,11 +306,34 @@ char keyboard_getchar() {
             if (scancode == KEY_ENTER) return '\n';
             if (scancode == KEY_BACKSPACE) return '\b';
             if (scancode == KEY_ESC) return '\x1B';
+            
             if (scancode < 0x80) {
-                const char* keyboard_map = "\x00\x1B" "1234567890-=" "\x08"
-                "\x00" "qwertyuiop[]" "\x0D" "\x00" "asdfghjkl;'`" "\x00" 
-                "\\zxcvbnm,./" "\x00\x00\x00" " ";
-                if (keyboard_map[scancode]) return keyboard_map[scancode];
+                const char* keyboard_map_lower = "\x00\x1B" "1234567890-=" "\x08"
+                    "\x00" "qwertyuiop[]" "\x0D" "\x00" "asdfghjkl;'`" "\x00" 
+                    "\\zxcvbnm,./" "\x00\x00\x00" " ";
+                
+                const char* keyboard_map_upper = "\x00\x1B" "!@#$%^&*()_+" "\x08"
+                    "\x00" "QWERTYUIOP{}" "\x0D" "\x00" "ASDFGHJKL:\"~" "\x00" 
+                    "|ZXCVBNM<>?" "\x00\x00\x00" " ";
+                
+                bool uppercase = (shift_pressed != caps_lock);
+                
+                if (ctrl_pressed) {
+                    if (scancode >= 0x10 && scancode <= 0x1C) {
+                        return scancode - 0x10 + 1;
+                    }
+                    continue;
+                }
+                
+                if (alt_pressed) {
+                    continue;
+                }
+                
+                if (uppercase && keyboard_map_upper[scancode]) {
+                    return keyboard_map_upper[scancode];
+                } else if (!uppercase && keyboard_map_lower[scancode]) {
+                    return keyboard_map_lower[scancode];
+                }
             }
         }
     }
@@ -284,18 +385,7 @@ void kernel_panic() {
     terminal_clear();
     
     terminal_writestring("\n\nKERNEL PANIC!\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
+    terminal_writestring("System is crashed. Please restart your computer. лол русский не поддерживается влгсргшрсгшыврзщсргщ вгшпрвшгписшрпврпсриыврлсиывисроивысиорывисорывисорыивсиорвыисорыивсывписшывригсргшщвпрн\n");
     
     while (1) {
         asm volatile ("cli; hlt");
@@ -400,15 +490,21 @@ void execute_fino() {
 void execute_color(char* color) {
     uint8_t bg_color;
     
-    if (str_cmp(color, "black") == 0) bg_color = COLOR_BLACK;
-    else if (str_cmp(color, "blue") == 0) bg_color = COLOR_BLUE;
-    else if (str_cmp(color, "green") == 0) bg_color = COLOR_GREEN;
-    else if (str_cmp(color, "cyan") == 0) bg_color = COLOR_CYAN;
-    else if (str_cmp(color, "red") == 0) bg_color = COLOR_RED;
-    else if (str_cmp(color, "magenta") == 0) bg_color = COLOR_MAGENTA;
-    else if (str_cmp(color, "brown") == 0) bg_color = COLOR_BROWN;
-    else if (str_cmp(color, "gray") == 0) bg_color = COLOR_GRAY;
-    else if (str_cmp(color, "white") == 0) bg_color = COLOR_WHITE;
+    char color_lower[32];
+    str_cpy(color_lower, color);
+    for (char* p = color_lower; *p; p++) {
+        if (*p >= 'A' && *p <= 'Z') *p += 32;
+    }
+    
+    if (str_cmp_case_insensitive(color_lower, "black") == 0) bg_color = COLOR_BLACK;
+    else if (str_cmp_case_insensitive(color_lower, "blue") == 0) bg_color = COLOR_BLUE;
+    else if (str_cmp_case_insensitive(color_lower, "green") == 0) bg_color = COLOR_GREEN;
+    else if (str_cmp_case_insensitive(color_lower, "cyan") == 0) bg_color = COLOR_CYAN;
+    else if (str_cmp_case_insensitive(color_lower, "red") == 0) bg_color = COLOR_RED;
+    else if (str_cmp_case_insensitive(color_lower, "magenta") == 0) bg_color = COLOR_MAGENTA;
+    else if (str_cmp_case_insensitive(color_lower, "brown") == 0) bg_color = COLOR_BROWN;
+    else if (str_cmp_case_insensitive(color_lower, "gray") == 0) bg_color = COLOR_GRAY;
+    else if (str_cmp_case_insensitive(color_lower, "white") == 0) bg_color = COLOR_WHITE;
     else {
         terminal_writestring("\nInvalid color. Available: black, blue, green, cyan, red, magenta, brown, gray, white\n");
         return;
@@ -471,7 +567,7 @@ void execute_disk() {
 }
 
 #define MAX_FILES 10
-char* files[MAX_FILES] = {" "};
+char* files[MAX_FILES] = {"file1.txt", "file2.doc", "notes"};
 int file_count = 3;
 
 void execute_ls() {
@@ -536,11 +632,16 @@ void execute_date() {
 }
 
 void execute_whoami() {
-    terminal_writestring("lol\n");
+    terminal_writestring("\nroot\n");
 }
 
 void execute_uptime() {
-    terminal_writestring("22 s.\n");
+    uint32_t seconds = timer_ticks / TIMER_HZ;
+    char sec_str[16];
+    int_to_str(seconds, sec_str);
+    terminal_writestring("\nUptime: ");
+    terminal_writestring(sec_str);
+    terminal_writestring(" seconds\n");
 }
 
 void execute_kptest() {
@@ -548,7 +649,7 @@ void execute_kptest() {
 }
 
 void execute_poweroff() {
-    terminal_writestring("System is shutting down...\n");
+    terminal_writestring("\nSystem is shutting down...\n");
     outw(0x604, 0x2000);
     outw(0xB004, 0x2000);
     outw(0x4004, 0x3400);
@@ -557,7 +658,7 @@ void execute_poweroff() {
 }
 
 void execute_reboot() {
-    terminal_writestring("System is rebooting...\n");
+    terminal_writestring("\nSystem is rebooting...\n");
     outb(0x64, 0xFE);
     asm volatile ("cli");
     asm volatile ("int $0xFF");
@@ -572,10 +673,10 @@ void execute_opengwm() {
     terminal_setcolor(COLOR_WHITE, COLOR_GRAY);
     terminal_clear();
    
-    terminal_writestring("\n\n  \n");
+    terminal_writestring("\n\n  FikusOS Graphical Window Manager\n");
     terminal_writestring("  ---------------------------------\n\n");
-    terminal_writestring("  \n");
-    terminal_writestring(" \n\n");
+    terminal_writestring("  Press 'DEL' to exit\n");
+    terminal_writestring("  Use mouse to move cursor (X)\n\n");
     
     mouse_init();
     mouse_enabled = true;
@@ -630,10 +731,11 @@ void show_ascii_art() {
 void execute_about() {
     show_ascii_art();
     terminal_writestring("OS: FikusOS\n");
+    terminal_writestring("Version: Alpha 0.1\n");
     terminal_writestring("License: GNU GPL 2\n");
     terminal_writestring("Created for FikusPI\n");
     terminal_writestring("Shell: FKShell\n");
-    terminal_writestring("Kernel: Fikus\n");
+    terminal_writestring("Kernel: 0.0.1-Fikus\n");
     terminal_writestring("\n");
 }
 
@@ -641,7 +743,14 @@ void execute_command(char* cmd) {
     char* args[10];
     int arg_count = 0;
     
-    char* token = cmd;
+    char cmd_copy[MAX_CMD_LEN];
+    str_cpy(cmd_copy, cmd);
+    
+    for (char* p = cmd_copy; *p; p++) {
+        if (*p >= 'A' && *p <= 'Z') *p += 32;
+    }
+    
+    char* token = cmd_copy;
     while (*token && arg_count < 10 - 1) {
         while (*token == ' ') token++;
         if (*token == '\0') break;
@@ -654,8 +763,8 @@ void execute_command(char* cmd) {
     
     if (arg_count == 0) return;
     
-    if (str_cmp(args[0], "help") == 0) {
-        terminal_writestring("Available commands:\n");
+    if (str_cmp_case_insensitive(args[0], "help") == 0) {
+        terminal_writestring("\nAvailable commands:\n");
         terminal_writestring("help     - Show this help\n");
         terminal_writestring("cls      - Clear screen\n");
         terminal_writestring("about    - Show system info\n");
@@ -672,53 +781,72 @@ void execute_command(char* cmd) {
         terminal_writestring("reboot   - Reboot\n");
         terminal_writestring("kptest   - Test kernel panic\n");
     }
-    else if (str_cmp(args[0], "cls") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "cls") == 0 || 
+             str_cmp_case_insensitive(args[0], "clear") == 0) {
         terminal_clear();
     }
-    else if (str_cmp(args[0], "about") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "about") == 0) {
         execute_about();
     }
-    else if (str_cmp(args[0], "color") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "color") == 0) {
         if (arg_count > 1) execute_color(args[1]);
         else terminal_writestring("\nUsage: color <black|blue|gray|...>\n");
     }
-    else if (str_cmp(args[0], "fino") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "fino") == 0) {
         execute_fino();
     }
-    else if (str_cmp(args[0], "dir") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "dir") == 0 || 
+             str_cmp_case_insensitive(args[0], "ls") == 0) {
         execute_ls();
     }
-    else if (str_cmp(args[0], "pwd") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "pwd") == 0) {
         execute_pwd();
     }
-    else if (str_cmp(args[0], "echo") == 0) {
-        execute_echo(args, arg_count);
+    else if (str_cmp_case_insensitive(args[0], "echo") == 0) {
+        char* orig_args[10];
+        int orig_arg_count = 0;
+        char* orig_token = cmd;
+        while (*orig_token && orig_arg_count < 10 - 1) {
+            while (*orig_token == ' ') orig_token++;
+            if (*orig_token == '\0') break;
+            
+            orig_args[orig_arg_count++] = orig_token;
+            while (*orig_token && *orig_token != ' ') orig_token++;
+            if (*orig_token) *orig_token++ = '\0';
+        }
+        orig_args[orig_arg_count] = 0;
+        
+        execute_echo(orig_args, orig_arg_count);
     }
-    else if (str_cmp(args[0], "date") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "date") == 0) {
         execute_date();
     }
-    else if (str_cmp(args[0], "whoami") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "whoami") == 0) {
         execute_whoami();
     }
-    else if (str_cmp(args[0], "uptime") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "uptime") == 0) {
         execute_uptime();
     }
-    else if (str_cmp(args[0], "mem") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "mem") == 0 || 
+             str_cmp_case_insensitive(args[0], "memory") == 0) {
         execute_memory();
     }
-    else if (str_cmp(args[0], "disk") == 0 || str_cmp(args[0], "data") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "disk") == 0 || 
+             str_cmp_case_insensitive(args[0], "data") == 0) {
         execute_disk();
     }
-    else if (str_cmp(args[0], "opengwm") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "opengwm") == 0) {
         execute_opengwm();
     }
-    else if (str_cmp(args[0], "poweroff") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "poweroff") == 0 || 
+             str_cmp_case_insensitive(args[0], "shutdown") == 0) {
         execute_poweroff();
     }
-    else if (str_cmp(args[0], "reboot") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "reboot") == 0 || 
+             str_cmp_case_insensitive(args[0], "restart") == 0) {
         execute_reboot();
     }
-    else if (str_cmp(args[0], "kptest") == 0) {
+    else if (str_cmp_case_insensitive(args[0], "kptest") == 0) {
         execute_kptest();
     }
     else if (args[0][0] != '\0') {
@@ -730,7 +858,7 @@ void execute_command(char* cmd) {
 
 void print_prompt() {
     terminal_setcolor(COLOR_GREEN, terminal_color >> 4);
-    terminal_writestring("Fikus$ ");
+    terminal_writestring("FIKUS~# ");
     terminal_setcolor(COLOR_WHITE, terminal_color >> 4);
     move_cursor(terminal_column, terminal_row);
 }
@@ -795,7 +923,7 @@ void kernel_main() {
     terminal_initialize();
     wait_for_enter();
     
-    terminal_setcolor(COLOR_GREEN, COLOR_BLUE);
+    terminal_setcolor(COLOR_WHITE, COLOR_BLUE);
     show_ascii_art();
     
     terminal_writestring("Initializing kernel...\n");
