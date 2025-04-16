@@ -16,3 +16,4 @@ Will there be a GUI for FikusOS? Answer: Officially - no, but you can always cre
 
 # We will be glad to any support from your side, you can take part in the development by writing to the author! Thank you for participating in the FikusOS project!
 
+![изображение](https://github.com/user-attachments/assets/02660643-4c13-4e3c-b835-aeb61bb009fc)
