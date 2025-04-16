@@ -731,7 +731,7 @@ void show_ascii_art() {
 void execute_about() {
     show_ascii_art();
     terminal_writestring("OS: FikusOS\n");
-    terminal_writestring("Version: Alpha 0.1\n");
+    terminal_writestring("Version: Alpha 0.2\n");
     terminal_writestring("License: GNU GPL 2\n");
     terminal_writestring("Created for FikusPI\n");
     terminal_writestring("Shell: FKShell\n");
