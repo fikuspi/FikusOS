@@ -79,6 +79,7 @@ void execute_command(char* cmd);
 void print_prompt();
 void wait_for_enter();
 void shell();
+void execute_calc();
 
 static inline void outb(uint16_t port, uint8_t val) {
     asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
@@ -112,6 +113,14 @@ Disk disks[] = {
     {"Secondary HDD", 1024 * 1024 * 1024, 768 * 1024 * 1024}
 };
 int disk_count = 2;
+
+#define MAX_FILES 10
+char* files[MAX_FILES] = {"calc.bin", "fino.bin", "notes"};
+int file_count = 3;
+
+int mouse_x = 40;
+int mouse_y = 12;
+bool mouse_enabled = false;
 
 static size_t str_len(const char* str) {
     size_t len = 0;
@@ -385,7 +394,7 @@ void kernel_panic() {
     terminal_clear();
     
     terminal_writestring("\n\nKERNEL PANIC!\n");
-    terminal_writestring("System is crashed. Please restart your computer. лол русский не поддерживается влгсргшрсгшыврзщсргщ вгшпрвшгписшрпврпсриыврлсиывисроивысиорывисорывисорыивсиорвыисорыивсывписшывригсргшщвпрн\n");
+    terminal_writestring("System is crashed. Please restart your computer.\n");
     
     while (1) {
         asm volatile ("cli; hlt");
@@ -566,10 +575,6 @@ void execute_disk() {
     }
 }
 
-#define MAX_FILES 10
-char* files[MAX_FILES] = {"file1.txt", "file2.doc", "notes"};
-int file_count = 3;
-
 void execute_ls() {
     terminal_writestring("\n");
     for (int i = 0; i < file_count; i++) {
@@ -580,7 +585,7 @@ void execute_ls() {
 }
 
 void execute_pwd() {
-    terminal_writestring("\n/root\n");
+    terminal_writestring("\n/usr\n");
 }
 
 void execute_echo(char* args[], int arg_count) {
@@ -632,7 +637,7 @@ void execute_date() {
 }
 
 void execute_whoami() {
-    terminal_writestring("\nroot\n");
+    terminal_writestring("\nusr\n");
 }
 
 void execute_uptime() {
@@ -664,10 +669,6 @@ void execute_reboot() {
     asm volatile ("int $0xFF");
     while (1);
 }
-
-int mouse_x = 40;
-int mouse_y = 12;
-bool mouse_enabled = false;
 
 void execute_opengwm() {
     terminal_setcolor(COLOR_WHITE, COLOR_GRAY);
@@ -739,6 +740,93 @@ void execute_about() {
     terminal_writestring("\n");
 }
 
+void execute_calc() {
+    terminal_writestring("\nFikusOS Calculator - Type 'exit' to quit\n");
+    terminal_writestring("Simple fk calc\n\n");
+    
+    char input[MAX_CMD_LEN];
+    int pos = 0;
+    
+    while (1) {
+        terminal_writestring("fkcalc> ");
+        pos = 0;
+        
+        while (pos < MAX_CMD_LEN - 1) {
+            char c = keyboard_getchar();
+            
+            if (c == '\n') {
+                terminal_putchar('\n');
+                input[pos] = '\0';
+                
+                if (str_cmp_case_insensitive(input, "exit") == 0) {
+                    return;
+                }
+                
+                int a = 0, b = 0, result = 0;
+                char op = '+';
+                int i = 0;
+                bool has_error = false;
+                
+                while (input[i] >= '0' && input[i] <= '9') {
+                    a = a * 10 + (input[i] - '0');
+                    i++;
+                }
+                
+                if (input[i] == '+' || input[i] == '-' || input[i] == '*' || input[i] == '/') {
+                    op = input[i];
+                    i++;
+                } else {
+                    has_error = true;
+                }
+                
+                while (input[i] >= '0' && input[i] <= '9') {
+                    b = b * 10 + (input[i] - '0');
+                    i++;
+                }
+                
+                if (input[i] != '\0' || has_error) {
+                    terminal_writestring("Error: Invalid expression format\n");
+                    break;
+                }
+                
+                switch(op) {
+                    case '+': result = a + b; break;
+                    case '-': result = a - b; break;
+                    case '*': result = a * b; break;
+                    case '/': 
+                        if (b != 0) result = a / b;
+                        else {
+                            terminal_writestring("Error: Division by zero\n");
+                            break;
+                        }
+                        break;
+                    default:
+                        terminal_writestring("Error: Invalid operator\n");
+                        break;
+                }
+                
+                char result_str[16];
+                int_to_str(result, result_str);
+                terminal_writestring("= ");
+                terminal_writestring(result_str);
+                terminal_writestring("\n");
+                
+                break;
+            }
+            else if (c == '\b') {
+                if (pos > 0) {
+                    pos--;
+                    terminal_putchar('\b');
+                }
+            }
+            else {
+                input[pos++] = c;
+                terminal_putchar(c);
+            }
+        }
+    }
+}
+
 void execute_command(char* cmd) {
     char* args[10];
     int arg_count = 0;
@@ -773,10 +861,12 @@ void execute_command(char* cmd) {
         terminal_writestring("dir      - List files\n");
         terminal_writestring("pwd      - Print working directory\n");
         terminal_writestring("echo     - Display message\n");
+        terminal_writestring("calc     - Simple calculator\n");
         terminal_writestring("date     - Show current date/time\n");
         terminal_writestring("whoami   - Show current user\n");
         terminal_writestring("mem      - Show memory usage\n");
         terminal_writestring("disk     - Show disk information\n");
+        terminal_writestring("opengwm  - Graphical Window Manager\n");
         terminal_writestring("poweroff - Shut down\n");
         terminal_writestring("reboot   - Reboot\n");
         terminal_writestring("kptest   - Test kernel panic\n");
@@ -835,6 +925,9 @@ void execute_command(char* cmd) {
              str_cmp_case_insensitive(args[0], "data") == 0) {
         execute_disk();
     }
+    else if (str_cmp_case_insensitive(args[0], "calc") == 0) {
+        execute_calc();
+    }
     else if (str_cmp_case_insensitive(args[0], "opengwm") == 0) {
         execute_opengwm();
     }
@@ -858,7 +951,7 @@ void execute_command(char* cmd) {
 
 void print_prompt() {
     terminal_setcolor(COLOR_GREEN, terminal_color >> 4);
-    terminal_writestring("FIKUS~# ");
+    terminal_writestring("Fikus~# ");
     terminal_setcolor(COLOR_WHITE, terminal_color >> 4);
     move_cursor(terminal_column, terminal_row);
 }
