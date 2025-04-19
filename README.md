@@ -10,9 +10,20 @@ FikusOS is an operating system for real computers and virtual machines. In essen
 
 Initially, there was a Srunix core, which was developed by the main developer of FikusOS, but which was known to a small circle of people and was written for fun. Afterwards, a fork was made on its basis, which is called Fikus. Fikus as a kernel is still being developed. After creating the kernel structure, it was decided to make FikusOS, which is intended mainly for virtual machines.
 
-# Main questions:
+# Coming soon:
 
-Will there be a GUI for FikusOS? Answer: Officially - Yes!
+GUI implementation.
+
+Improved drivers
+
+CPU management
+
+Network stack
+
+File system
+
+And much more
+
 
 # We will be glad to any support from your side, you can take part in the development by writing to the author! Thank you for participating in the FikusOS project!
 
