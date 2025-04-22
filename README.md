@@ -1,4 +1,4 @@
-![изображение](https://github.com/user-attachments/assets/07d9a04a-5a36-4c11-b858-eedfb5e3bc11)
+![изображение](https://github.com/user-attachments/assets/69cca9d0-d226-4bb6-a320-430969dd8cc8)
 
 
 # FikusOS - Free x32 DOS-like OS.
