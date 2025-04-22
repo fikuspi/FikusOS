@@ -1,12 +1,41 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdarg.h>
+
+void* memcpy(void* dest, const void* src, size_t n) {
+    char* d = (char*)dest;
+    const char* s = (const char*)src;
+    for (size_t i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+    return dest;
+}
+
+char* strchr(const char* s, int c) {
+    while (*s != '\0') {
+        if (*s == c) {
+            return (char*)s;
+        }
+        s++;
+    }
+    return NULL;
+}
+
+int atoi(const char* str) {
+    int res = 0;
+    while (*str >= '0' && *str <= '9') {
+        res = res * 10 + (*str - '0');
+        str++;
+    }
+    return res;
+}
 
 #define COM1 0x3F8
 #define VIDEO_MEMORY ((volatile uint16_t*)0xB8000)
 #define SCREEN_WIDTH 80
 #define SCREEN_HEIGHT 25
-#define MAX_CMD_LEN 128
+#define MAX_CMD_LEN 256
 #define MOUSE_PORT 0x60
 #define MOUSE_CTRL 0x64
 #define PIT_FREQUENCY 1193182
@@ -14,6 +43,16 @@
 #define PIT_COMMAND 0x43
 #define CMOS_ADDRESS 0x70
 #define CMOS_DATA 0x71
+#define NET_IO_BASE 0x1000
+#define NET_IRQ 11
+#define PCI_CONFIG_ADDRESS 0xCF8
+#define PCI_CONFIG_DATA 0xCFC
+#define MAX_FILES 128
+#define MAX_PROCESSES 16
+#define MAX_NET_CONNECTIONS 8
+#define SECTOR_SIZE 512
+#define MAX_PATH_LEN 256
+#define TOTAL_MEMORY_KB 640
 
 #define COLOR_BLACK   0x0
 #define COLOR_BLUE    0x1
@@ -42,65 +81,12 @@
 #define MOUSE_WRITE   0xD4
 #define MOUSE_INIT    0xF4
 
-void move_cursor(size_t x, size_t y);
-void terminal_initialize();
-void terminal_clear();
-void terminal_putchar(char c);
-void terminal_writestring(const char* data);
-void terminal_setcolor(uint8_t fg, uint8_t bg);
-void terminal_write(const char* data, size_t size);
-void terminal_scroll();
-uint8_t cmos_read(uint8_t reg);
-int bcd_to_bin(int bcd);
-char keyboard_getchar();
-void init_timer();
-void mouse_wait(uint8_t type);
-void mouse_write(uint8_t data);
-uint8_t mouse_read();
-void mouse_init();
-void kernel_panic();
-void execute_fino();
-void execute_color(char* color);
-void execute_memory();
-void execute_disk();
-void execute_ls();
-void execute_pwd();
-void execute_echo(char* args[], int arg_count);
-void execute_date();
-void execute_whoami();
-void execute_uptime();
-void execute_kptest();
-void execute_poweroff();
-void execute_reboot();
-void execute_opengwm();
-void show_ascii_art();
-void execute_about();
-void execute_command(char* cmd);
-void print_prompt();
-void wait_for_enter();
-void shell();
-void execute_calc();
+#define FILE_REGULAR 0
+#define FILE_DIR     1
+#define FILE_SYMLINK 2
 
-static inline void outb(uint16_t port, uint8_t val) {
-    asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline void outw(uint16_t port, uint16_t val) {
-    asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint8_t inb(uint16_t port) {
-    uint8_t ret;
-    asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
-
-volatile uint32_t timer_ticks = 0;
-#define TIMER_HZ 18.2
-uint32_t boot_time = 0;
-
-#define TOTAL_MEMORY_KB 640
-static uintptr_t next_node_addr = 0x100000;
+#define FS_SUCCESS 0
+#define FS_ERROR   1
 
 typedef struct {
     char name[32];
@@ -108,68 +94,92 @@ typedef struct {
     uint64_t free_bytes;
 } Disk;
 
-Disk disks[] = {
-    {"Primary HDD", 500 * 1024 * 1024, 250 * 1024 * 1024},
-    {"Secondary HDD", 1024 * 1024 * 1024, 768 * 1024 * 1024}
-};
-int disk_count = 2;
+typedef struct {
+    char name[32];
+    uint32_t size;
+    uint8_t type;
+    uint32_t inode;
+    uint32_t parent_inode;
+} File;
 
-#define MAX_FILES 10
-char* files[MAX_FILES] = {"calc.bin", "fino.bin", "notes"};
-int file_count = 3;
+typedef struct {
+    uint8_t mac[6];
+    uint8_t ip[4];
+    uint8_t subnet[4];
+    uint8_t gateway[4];
+    uint8_t dns[4];
+    bool dhcp_enabled;
+} NetworkConfig;
+
+typedef struct {
+    uint8_t state;
+    uint16_t local_port;
+    uint16_t remote_port;
+    uint8_t remote_ip[4];
+    uint32_t seq_num;
+    uint32_t ack_num;
+} TCPConnection;
+
+typedef struct {
+    uint32_t pid;
+    uint32_t ppid;
+    char name[32];
+    uint32_t priority;
+    uint32_t state;
+    uintptr_t stack_ptr;
+    uintptr_t entry_point;
+} Process;
+
+typedef struct {
+    uint32_t magic;
+    uint32_t block_size;
+    uint32_t inodes_count;
+    uint32_t free_inodes;
+    uint32_t blocks_count;
+    uint32_t free_blocks;
+    uint32_t first_data_block;
+    uint32_t inodes_per_group;
+    uint32_t mtime;
+    uint32_t wtime;
+    uint16_t mounts_count;
+    uint16_t max_mounts;
+    uint16_t magic_signature;
+    uint16_t state;
+    uint16_t errors;
+    uint16_t minor_rev_level;
+    uint32_t lastcheck;
+    uint32_t checkinterval;
+    uint32_t creator_os;
+    uint32_t rev_level;
+    uint16_t def_resuid;
+    uint16_t def_resgid;
+} Superblock;
+
+volatile uint32_t timer_ticks = 0;
+#define TIMER_HZ 18.2
+uint32_t boot_time = 0;
+
+static uintptr_t next_node_addr = 0x100000;
+static uintptr_t heap_start = 0x200000;
+static uintptr_t heap_end = 0x400000;
+
+Disk disks[] = {
+    {"Primary HDD", 500ULL * 1024 * 1024, 250ULL * 1024 * 1024},
+    {"Secondary HDD", 1024ULL * 1024 * 1024, 768ULL * 1024 * 1024},
+    {"USB Drive", 16ULL * 1024 * 1024 * 1024, 12ULL * 1024 * 1024 * 1024}
+};
+int disk_count = 3;
+
+File files[MAX_FILES];
+int file_count = 5;
 
 int mouse_x = 40;
 int mouse_y = 12;
 bool mouse_enabled = false;
-
-static size_t str_len(const char* str) {
-    size_t len = 0;
-    while (str[len]) len++;
-    return len;
-}
-
-static int str_cmp_case_insensitive(const char* s1, const char* s2) {
-    while (*s1 && *s2) {
-        char c1 = *s1;
-        char c2 = *s2;
-        
-        if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
-        if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
-        
-        if (c1 != c2) return c1 - c2;
-        s1++;
-        s2++;
-    }
-    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
-}
-
-static void str_cpy(char* dest, const char* src) {
-    while ((*dest++ = *src++));
-}
-
-static void int_to_str(int num, char* str) {
-    int i = 0;
-    if (num == 0) {
-        str[i++] = '0';
-    } else {
-        while (num != 0) {
-            int rem = num % 10;
-            str[i++] = rem + '0';
-            num = num / 10;
-        }
-    }
-    str[i] = '\0';
-    
-    int start = 0;
-    int end = i - 1;
-    while (start < end) {
-        char temp = str[start];
-        str[start] = str[end];
-        str[end] = temp;
-        start++;
-        end--;
-    }
-}
+bool mouse_left_button = false;
+bool mouse_right_button = false;
+int mouse_start_x = 0;
+int mouse_start_y = 0;
 
 size_t terminal_row = 0;
 size_t terminal_column = 0;
@@ -180,6 +190,64 @@ bool shift_pressed = false;
 bool ctrl_pressed = false;
 bool alt_pressed = false;
 bool caps_lock = false;
+
+NetworkConfig net_config = {
+    .mac = {0x52, 0x54, 0x00, 0x12, 0x34, 0x56},
+    .ip = {192, 168, 1, 100},
+    .subnet = {255, 255, 255, 0},
+    .gateway = {192, 168, 1, 1},
+    .dns = {8, 8, 8, 8},
+    .dhcp_enabled = false
+};
+
+TCPConnection tcp_connections[MAX_NET_CONNECTIONS];
+Process processes[MAX_PROCESSES];
+int process_count = 0;
+
+void kernel_main();
+void kernel_panic(const char* message);
+
+static inline void outb(uint16_t port, uint8_t val) {
+    asm volatile ("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline void outw(uint16_t port, uint16_t val) {
+    asm volatile ("outw %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline void outl(uint16_t port, uint32_t val) {
+    asm volatile ("outl %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint8_t inb(uint16_t port) {
+    uint8_t ret;
+    asm volatile ("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline uint16_t inw(uint16_t port) {
+    uint16_t ret;
+    asm volatile ("inw %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline uint32_t inl(uint16_t port) {
+    uint32_t ret;
+    asm volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void io_wait() {
+    outb(0x80, 0);
+}
+
+void move_cursor(size_t x, size_t y) {
+    uint16_t pos = y * SCREEN_WIDTH + x;
+    outb(0x3D4, 0x0F);
+    outb(0x3D5, (uint8_t)(pos & 0xFF));
+    outb(0x3D4, 0x0E);
+    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
+}
 
 void terminal_setcolor(uint8_t fg, uint8_t bg) {
     terminal_color = (bg << 4) | (fg & 0x0F);
@@ -251,15 +319,123 @@ void terminal_write(const char* data, size_t size) {
 }
 
 void terminal_writestring(const char* data) {
-    terminal_write(data, str_len(data));
+    while (*data) {
+        terminal_putchar(*data++);
+    }
 }
 
-void move_cursor(size_t x, size_t y) {
-    uint16_t pos = y * SCREEN_WIDTH + x;
-    outb(0x3D4, 0x0F);
-    outb(0x3D5, (uint8_t)(pos & 0xFF));
-    outb(0x3D4, 0x0E);
-    outb(0x3D5, (uint8_t)((pos >> 8) & 0xFF));
+static size_t str_len(const char* str) {
+    size_t len = 0;
+    while (str[len]) len++;
+    return len;
+}
+
+static int str_cmp(const char* s1, const char* s2) {
+    while (*s1 && (*s1 == *s2)) {
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}
+
+static int str_cmp_case_insensitive(const char* s1, const char* s2) {
+    while (*s1 && *s2) {
+        char c1 = *s1;
+        char c2 = *s2;
+        
+        if (c1 >= 'A' && c1 <= 'Z') c1 += 32;
+        if (c2 >= 'A' && c2 <= 'Z') c2 += 32;
+        
+        if (c1 != c2) return c1 - c2;
+        s1++;
+        s2++;
+    }
+    return *(const unsigned char*)s1 - *(const unsigned char*)s2;
+}
+
+static void str_cpy(char* dest, const char* src) {
+    while ((*dest++ = *src++));
+}
+
+static void int_to_str(int num, char* str) {
+    int i = 0;
+    if (num == 0) {
+        str[i++] = '0';
+    } else {
+        while (num != 0) {
+            int rem = num % 10;
+            str[i++] = rem + '0';
+            num = num / 10;
+        }
+    }
+    str[i] = '\0';
+    
+    int start = 0;
+    int end = i - 1;
+    while (start < end) {
+        char temp = str[start];
+        str[start] = str[end];
+        str[end] = temp;
+        start++;
+        end--;
+    }
+}
+
+void terminal_printf(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    
+    char buffer[256];
+    char *ptr = buffer;
+    
+    while (*format) {
+        if (*format == '%') {
+            format++;
+            switch (*format) {
+                case 'd': {
+                    int num = va_arg(args, int);
+                    char num_str[16];
+                    int_to_str(num, num_str);
+                    char *tmp = num_str;
+                    while (*tmp) {
+                        *ptr++ = *tmp++;
+                    }
+                    break;
+                }
+                case 's': {
+                    char *str = va_arg(args, char*);
+                    while (*str) {
+                        *ptr++ = *str++;
+                    }
+                    break;
+                }
+                case 'c': {
+                    char c = (char)va_arg(args, int);
+                    *ptr++ = c;
+                    break;
+                }
+                case 'x': {
+                    uint32_t num = va_arg(args, uint32_t);
+                    const char* hex = "0123456789ABCDEF";
+                    for (int i = 7; i >= 0; i--) {
+                        *ptr++ = hex[(num >> (i * 4)) & 0xF];
+                    }
+                    break;
+                }
+                case '%': {
+                    *ptr++ = '%';
+                    break;
+                }
+            }
+        } else {
+            *ptr++ = *format;
+        }
+        format++;
+    }
+    *ptr = '\0';
+    
+    terminal_writestring(buffer);
+    va_end(args);
 }
 
 uint8_t cmos_read(uint8_t reg) {
@@ -385,26 +561,193 @@ void mouse_init() {
     mouse_wait(0);
     outb(MOUSE_CTRL, MOUSE_ENABLE);
     mouse_wait(0);
-    mouse_write(MOUSE_INIT);
+    outb(MOUSE_CTRL, 0xA8);
+    mouse_wait(0);
+    outb(MOUSE_CTRL, 0x20);
+    mouse_wait(1);
+    uint8_t status = inb(MOUSE_PORT) | 2;
+    mouse_wait(0);
+    outb(MOUSE_CTRL, 0x60);
+    mouse_wait(0);
+    outb(MOUSE_PORT, status);
+    mouse_write(0xF6);
+    mouse_read();
+    mouse_write(0xF4);
     mouse_read();
 }
 
-void kernel_panic() {
-    terminal_setcolor(COLOR_RED, COLOR_WHITE);
-    terminal_clear();
-    
-    terminal_writestring("\n\nKERNEL PANIC!\n");
-    terminal_writestring("System is crashed. Please restart your computer.\n");
-    
-    while (1) {
-        asm volatile ("cli; hlt");
+uint32_t pci_read(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset) {
+    uint32_t address = (uint32_t)((bus << 16) | (slot << 11) | (func << 8) | (offset & 0xFC) | 0x80000000);
+    outl(PCI_CONFIG_ADDRESS, address);
+    return inl(PCI_CONFIG_DATA);
+}
+
+void pci_write(uint8_t bus, uint8_t slot, uint8_t func, uint8_t offset, uint32_t value) {
+    uint32_t address = (uint32_t)((bus << 16) | (slot << 11) | (func << 8) | (offset & 0xFC) | 0x80000000);
+    outl(PCI_CONFIG_ADDRESS, address);
+    outl(PCI_CONFIG_DATA, value);
+}
+
+bool detect_network_card() {
+    for (uint8_t bus = 0; bus < 256; bus++) {
+        for (uint8_t slot = 0; slot < 32; slot++) {
+            uint32_t vendor_device = pci_read(bus, slot, 0, 0);
+            uint16_t vendor = vendor_device & 0xFFFF;
+            uint16_t device = (vendor_device >> 16) & 0xFFFF;
+            
+            if (vendor != 0xFFFF) {
+                uint8_t class = pci_read(bus, slot, 0, 0x08) >> 24;
+                uint8_t subclass = pci_read(bus, slot, 0, 0x08) >> 16 & 0xFF;
+                
+                if (class == 0x02 && subclass == 0x00) {
+                    return true;
+                }
+            }
+        }
     }
+    return false;
+}
+
+void net_send_packet(uint8_t* data, uint16_t len) {
+    outw(NET_IO_BASE + 0, len);
+    for (uint16_t i = 0; i < len; i++) {
+        outb(NET_IO_BASE + 4, data[i]);
+    }
+    outb(NET_IO_BASE + 6, 1);
+}
+
+uint16_t net_receive_packet(uint8_t* buffer) {
+    uint16_t len = inw(NET_IO_BASE + 0);
+    if (len == 0 || len > 2048) return 0;
+    
+    for (uint16_t i = 0; i < len; i++) {
+        buffer[i] = inb(NET_IO_BASE + 4);
+    }
+    outb(NET_IO_BASE + 6, 0);
+    return len;
+}
+
+void net_init() {
+    if (!detect_network_card()) {
+        terminal_writestring("No network card found\n");
+        return;
+    }
+    
+    terminal_writestring("Initializing network...\n");
+    
+    for (int i = 0; i < MAX_NET_CONNECTIONS; i++) {
+        tcp_connections[i].state = 0;
+    }
+}
+
+void net_handle_packet(uint8_t* packet, uint16_t len) {
+    uint8_t* ip_header = packet + 14;
+    uint8_t protocol = ip_header[9];
+    
+    if (protocol == 6) {
+        uint8_t* tcp_header = ip_header + 20;
+        uint16_t src_port = (tcp_header[0] << 8) | tcp_header[1];
+        uint16_t dst_port = (tcp_header[2] << 8) | tcp_header[3];
+        
+        for (int i = 0; i < MAX_NET_CONNECTIONS; i++) {
+            if (tcp_connections[i].state == 1 && 
+                tcp_connections[i].local_port == dst_port) {
+                uint8_t flags = tcp_header[13];
+                if (flags & 0x01) {
+                    tcp_connections[i].state = 0;
+                }
+                break;
+            }
+        }
+    }
+}
+
+void net_process() {
+    uint8_t packet[2048];
+    uint16_t len = net_receive_packet(packet);
+    if (len > 0) {
+        net_handle_packet(packet, len);
+    }
+}
+
+int net_connect(uint8_t* ip, uint16_t port) {
+    for (int i = 0; i < MAX_NET_CONNECTIONS; i++) {
+        if (tcp_connections[i].state == 0) {
+            tcp_connections[i].state = 1;
+            tcp_connections[i].local_port = 49152 + i;
+            tcp_connections[i].remote_port = port;
+            memcpy(tcp_connections[i].remote_ip, ip, 4);
+            tcp_connections[i].seq_num = 0;
+            tcp_connections[i].ack_num = 0;
+            return i;
+        }
+    }
+    return -1;
+}
+
+void net_disconnect(int conn_id) {
+    if (conn_id >= 0 && conn_id < MAX_NET_CONNECTIONS) {
+        tcp_connections[conn_id].state = 0;
+    }
+}
+
+int net_send(int conn_id, uint8_t* data, uint16_t len) {
+    if (conn_id < 0 || conn_id >= MAX_NET_CONNECTIONS || 
+        tcp_connections[conn_id].state != 1) {
+        return -1;
+    }
+    
+    uint8_t packet[2048];
+    uint8_t* eth_header = packet;
+    uint8_t* ip_header = packet + 14;
+    uint8_t* tcp_header = packet + 34;
+    uint8_t* payload = packet + 54;
+    
+    memcpy(payload, data, len);
+    
+    uint16_t total_len = 54 + len;
+    net_send_packet(packet, total_len);
+    
+    return len;
+}
+
+int net_receive(int conn_id, uint8_t* buffer, uint16_t max_len) {
+    if (conn_id < 0 || conn_id >= MAX_NET_CONNECTIONS || 
+        tcp_connections[conn_id].state != 1) {
+        return -1;
+    }
+    
+    uint8_t packet[2048];
+    uint16_t len = net_receive_packet(packet);
+    if (len > 0) {
+        uint8_t* ip_header = packet + 14;
+        uint8_t* tcp_header = ip_header + 20;
+        uint8_t* payload = tcp_header + 20;
+        uint16_t payload_len = len - 54;
+        
+        if (payload_len > max_len) payload_len = max_len;
+        memcpy(buffer, payload, payload_len);
+        return payload_len;
+    }
+    return 0;
+}
+
+void* malloc(size_t size) {
+    if (heap_start + size > heap_end) {
+        return NULL;
+    }
+    void* ptr = (void*)heap_start;
+    heap_start += size;
+    return ptr;
+}
+
+void free(void* ptr) {
 }
 
 void execute_fino() {
     terminal_clear();
     terminal_writestring("\nFikusOS Text Editor (fino) - ESC to exit\n");
-    terminal_writestring("----------------------------------------\n");
+    terminal_writestring("__________________________________________\n");
     
     char buffer[1024] = {0};
     int pos = 0;
@@ -578,14 +921,14 @@ void execute_disk() {
 void execute_ls() {
     terminal_writestring("\n");
     for (int i = 0; i < file_count; i++) {
-        terminal_writestring(files[i]);
-        terminal_writestring("  ");
+        terminal_writestring(files[i].name);
+        terminal_writestring(files[i].type ? "/ " : "  ");
     }
     terminal_writestring("\n");
 }
 
 void execute_pwd() {
-    terminal_writestring("\n/usr\n");
+    terminal_writestring("\n/\n");
 }
 
 void execute_echo(char* args[], int arg_count) {
@@ -636,6 +979,29 @@ void execute_date() {
     terminal_writestring("\n");
 }
 
+void execute_time() {
+    uint8_t hour = cmos_read(0x04);
+    uint8_t minute = cmos_read(0x02);
+    uint8_t second = cmos_read(0x00);
+    
+    hour = bcd_to_bin(hour);
+    minute = bcd_to_bin(minute);
+    second = bcd_to_bin(second);
+    
+    char hour_str[3], min_str[3], sec_str[3];
+    int_to_str(hour, hour_str);
+    int_to_str(minute, min_str);
+    int_to_str(second, sec_str);
+    
+    terminal_writestring("Current time: ");
+    terminal_writestring(hour_str);
+    terminal_writestring(":");
+    terminal_writestring(min_str);
+    terminal_writestring(":");
+    terminal_writestring(sec_str);
+    terminal_writestring("\n");
+}
+
 void execute_whoami() {
     terminal_writestring("\nusr\n");
 }
@@ -649,8 +1015,29 @@ void execute_uptime() {
     terminal_writestring(" seconds\n");
 }
 
+void execute_ver() {
+    terminal_writestring("\nFikusOS version 0.3 Alpha\n");
+    terminal_writestring("Build 2025-04-22\n");
+}
+
+void execute_pause() {
+    terminal_writestring("\nPress any key to continue...");
+    keyboard_getchar();
+    terminal_writestring("\n");
+}
+
+void execute_cls() {
+    terminal_clear();
+}
+
+void execute_exit() {
+    terminal_writestring("\nLogging out...\n");
+    asm volatile ("cli");
+    asm volatile ("int $0xFF");
+}
+
 void execute_kptest() {
-    kernel_panic();
+    kernel_panic("kernel panic");
 }
 
 void execute_poweroff() {
@@ -664,6 +1051,9 @@ void execute_poweroff() {
 
 void execute_reboot() {
     terminal_writestring("\nSystem is rebooting...\n");
+    uint8_t temp = inb(0x64);
+    while (temp & 0x02)
+        temp = inb(0x64);
     outb(0x64, 0xFE);
     asm volatile ("cli");
     asm volatile ("int $0xFF");
@@ -674,15 +1064,18 @@ void execute_opengwm() {
     terminal_setcolor(COLOR_WHITE, COLOR_GRAY);
     terminal_clear();
    
-    terminal_writestring("\n\n  FikusOS Graphical Window Manager\n");
+    terminal_writestring("\n\n  FikusOS Mouse Test\n");
     terminal_writestring("  ---------------------------------\n\n");
-    terminal_writestring("  Press 'DEL' to exit\n");
-    terminal_writestring("  Use mouse to move cursor (X)\n\n");
+    terminal_writestring("  Reboot pc to exit\n");
+    terminal_writestring("  Use mouse to move cursor (X)\n");
+    terminal_writestring("  Left click to select text\n\n");
     
     mouse_init();
     mouse_enabled = true;
     
-    terminal_buffer[mouse_y * SCREEN_WIDTH + mouse_x] = 'X' | (COLOR_BLACK << 8) | (COLOR_WHITE << 12);
+    int prev_x = mouse_x;
+    int prev_y = mouse_y;
+    bool selecting = false;
     
     while (1) {
         if (inb(0x64) & 0x01) {
@@ -690,11 +1083,29 @@ void execute_opengwm() {
             if (status & 0x20) {
                 uint8_t data = inb(0x60);
                 
-                if (mouse_enabled && (data & 0x08)) {
+                if (data == 0x9B) {
+                    mouse_left_button = true;
+                    mouse_start_x = mouse_x;
+                    mouse_start_y = mouse_y;
+                    selecting = true;
+                } else if (data == 0x1B) {
+                    mouse_left_button = false;
+                    selecting = false;
+                    
+                    for (int y = 0; y < SCREEN_HEIGHT; y++) {
+                        for (int x = 0; x < SCREEN_WIDTH; x++) {
+                            if (terminal_buffer[y * SCREEN_WIDTH + x] & 0x7000) {
+                                terminal_buffer[y * SCREEN_WIDTH + x] &= 0x8FFF;
+                            }
+                        }
+                    }
+                }
+                
+                if (mouse_enabled) {
+                    terminal_buffer[prev_y * SCREEN_WIDTH + prev_x] = ' ' | (COLOR_GRAY << 8);
+                    
                     int8_t x_movement = (int8_t)inb(0x60);
                     int8_t y_movement = (int8_t)inb(0x60);
-                    
-                    terminal_buffer[mouse_y * SCREEN_WIDTH + mouse_x] = ' ' | (COLOR_GRAY << 8);
                     
                     mouse_x += x_movement;
                     mouse_y -= y_movement;
@@ -704,7 +1115,26 @@ void execute_opengwm() {
                     if (mouse_y < 0) mouse_y = 0;
                     if (mouse_y >= SCREEN_HEIGHT) mouse_y = SCREEN_HEIGHT - 1;
                     
+                    if (selecting) {
+                        int start_x = mouse_start_x < mouse_x ? mouse_start_x : mouse_x;
+                        int end_x = mouse_start_x < mouse_x ? mouse_x : mouse_start_x;
+                        int start_y = mouse_start_y < mouse_y ? mouse_start_y : mouse_y;
+                        int end_y = mouse_start_y < mouse_y ? mouse_y : mouse_start_y;
+                        
+                        for (int y = 0; y < SCREEN_HEIGHT; y++) {
+                            for (int x = 0; x < SCREEN_WIDTH; x++) {
+                                if (y >= start_y && y <= end_y && x >= start_x && x <= end_x) {
+                                    terminal_buffer[y * SCREEN_WIDTH + x] |= 0x7000;
+                                } else {
+                                    terminal_buffer[y * SCREEN_WIDTH + x] &= 0x8FFF;
+                                }
+                            }
+                        }
+                    }
+                    
                     terminal_buffer[mouse_y * SCREEN_WIDTH + mouse_x] = 'X' | (COLOR_BLACK << 8) | (COLOR_WHITE << 12);
+                    prev_x = mouse_x;
+                    prev_y = mouse_y;
                 }
             }
             
@@ -732,17 +1162,17 @@ void show_ascii_art() {
 void execute_about() {
     show_ascii_art();
     terminal_writestring("OS: FikusOS\n");
-    terminal_writestring("Version: Alpha 0.2\n");
+    terminal_writestring("Version: Alpha 0.3\n");
     terminal_writestring("License: GNU GPL 2\n");
     terminal_writestring("Created for FikusPI\n");
     terminal_writestring("Shell: FKShell\n");
-    terminal_writestring("Kernel: 0.0.1-Fikus\n");
+    terminal_writestring("Kernel: 0.0.8-Fikus\n");
     terminal_writestring("\n");
 }
 
 void execute_calc() {
-    terminal_writestring("\nFikusOS Calculator - Type 'exit' to quit\n");
-    terminal_writestring("Simple fk calc\n\n");
+    terminal_writestring("\nFikusOS Calculator - Type 'q' to quit\n");
+    terminal_writestring("Simple calc\n\n");
     
     char input[MAX_CMD_LEN];
     int pos = 0;
@@ -758,7 +1188,7 @@ void execute_calc() {
                 terminal_putchar('\n');
                 input[pos] = '\0';
                 
-                if (str_cmp_case_insensitive(input, "exit") == 0) {
+                if (str_cmp(input, "q") == 0) {
                     return;
                 }
                 
@@ -827,6 +1257,129 @@ void execute_calc() {
     }
 }
 
+void execute_ping(char* ip_str) {
+    uint8_t ip[4] = {0};
+    char* token = ip_str;
+    int i = 0;
+    
+    while (token && i < 4) {
+        ip[i++] = atoi(token);
+        token = strchr(token, '.');
+        if (token) token++;
+    }
+    
+    if (i != 4) {
+        terminal_writestring("Invalid IP address format. Use x.x.x.x\n");
+        return;
+    }
+    
+    terminal_printf("Pinging %d.%d.%d.%d...\n", ip[0], ip[1], ip[2], ip[3]);
+    
+    int conn = net_connect(ip, 7);
+    if (conn < 0) {
+        terminal_writestring("Failed to create connection\n");
+        return;
+    }
+    
+    uint8_t packet[32] = "PING";
+    if (net_send(conn, packet, 4) < 0) {
+        terminal_writestring("Failed to send ping\n");
+        net_disconnect(conn);
+        return;
+    }
+    
+    uint32_t start_time = timer_ticks;
+    uint8_t reply[32];
+    
+    while (timer_ticks - start_time < TIMER_HZ * 2) {
+        int reply_len = net_receive(conn, reply, sizeof(reply));
+        if (reply_len > 0) {
+            uint32_t ping_time = (timer_ticks - start_time) * 1000 / TIMER_HZ;
+            terminal_printf("Reply from %d.%d.%d.%d: time=%dms\n", 
+                          ip[0], ip[1], ip[2], ip[3], ping_time);
+            net_disconnect(conn);
+            return;
+        }
+    }
+    
+    terminal_writestring("Request timed out\n");
+    net_disconnect(conn);
+}
+
+void execute_ifconfig() {
+    terminal_printf("eth0: flags=UP BROADCAST RUNNING\n");
+    terminal_printf("    MAC: %02X:%02X:%02X:%02X:%02X:%02X\n", 
+                   net_config.mac[0], net_config.mac[1], net_config.mac[2],
+                   net_config.mac[3], net_config.mac[4], net_config.mac[5]);
+    terminal_printf("    IP: %d.%d.%d.%d\n", 
+                   net_config.ip[0], net_config.ip[1], 
+                   net_config.ip[2], net_config.ip[3]);
+    terminal_printf("    Subnet: %d.%d.%d.%d\n", 
+                   net_config.subnet[0], net_config.subnet[1],
+                   net_config.subnet[2], net_config.subnet[3]);
+    terminal_printf("    Gateway: %d.%d.%d.%d\n", 
+                   net_config.gateway[0], net_config.gateway[1],
+                   net_config.gateway[2], net_config.gateway[3]);
+    terminal_printf("    DNS: %d.%d.%d.%d\n", 
+                   net_config.dns[0], net_config.dns[1],
+                   net_config.dns[2], net_config.dns[3]);
+}
+
+void execute_netstat() {
+    terminal_writestring("Active TCP connections:\n");
+    terminal_writestring("Local Address          Foreign Address        State\n");
+    
+    for (int i = 0; i < MAX_NET_CONNECTIONS; i++) {
+        if (tcp_connections[i].state == 1) {
+            terminal_printf("%d.%d.%d.%d:%d    %d.%d.%d.%d:%d    ESTABLISHED\n",
+                          net_config.ip[0], net_config.ip[1], net_config.ip[2], net_config.ip[3],
+                          tcp_connections[i].local_port,
+                          tcp_connections[i].remote_ip[0], tcp_connections[i].remote_ip[1],
+                          tcp_connections[i].remote_ip[2], tcp_connections[i].remote_ip[3],
+                          tcp_connections[i].remote_port);
+        }
+    }
+}
+
+void execute_help(int page) {
+    switch(page) {
+        case 1:
+            terminal_writestring("\nAvailable commands (page 1/2):\n");
+            terminal_writestring("help [page] - Show this help\n");
+            terminal_writestring("cls         - Clear screen\n");
+            terminal_writestring("about       - Show system info\n");
+            terminal_writestring("color       - Change background color\n");
+            terminal_writestring("fino        - Text editor\n");
+            terminal_writestring("dir         - List files\n");
+            terminal_writestring("pwd         - Print working directory\n");
+            terminal_writestring("echo        - Display message\n");
+            terminal_writestring("calc        - Simple calculator\n");
+            terminal_writestring("date        - Show current date/time\n");
+            terminal_writestring("time        - Show current time\n");
+            terminal_writestring("ver         - Show version\n");
+            terminal_writestring("Type 'help 2' for more commands\n");
+            break;
+        case 2:
+            terminal_writestring("\nAvailable commands (page 2/2):\n");
+            terminal_writestring("whoami      - Show current user\n");
+            terminal_writestring("mem         - Show memory usage\n");
+            terminal_writestring("disk        - Show disk information\n");
+            terminal_writestring("pause       - Wait for keypress\n");
+            terminal_writestring("poweroff    - Shut down\n");
+            terminal_writestring("reboot      - Reboot\n");
+            terminal_writestring("exit        - Log out\n");
+            terminal_writestring("kptest      - Test kernel panic\n");
+            terminal_writestring("ping        - Ping a network host\n");
+            terminal_writestring("ifconfig    - Show network config\n");
+            terminal_writestring("netstat     - Show network stats\n");
+            terminal_writestring("Type 'help 1' for previous commands\n");
+            break;
+        default:
+            terminal_writestring("\nInvalid help page. Use 'help 1' or 'help 2'\n");
+            break;
+    }
+}
+
 void execute_command(char* cmd) {
     char* args[10];
     int arg_count = 0;
@@ -852,28 +1405,15 @@ void execute_command(char* cmd) {
     if (arg_count == 0) return;
     
     if (str_cmp_case_insensitive(args[0], "help") == 0) {
-        terminal_writestring("\nAvailable commands:\n");
-        terminal_writestring("help     - Show this help\n");
-        terminal_writestring("cls      - Clear screen\n");
-        terminal_writestring("about    - Show system info\n");
-        terminal_writestring("color    - Change background color\n");
-        terminal_writestring("fino     - Text editor\n");
-        terminal_writestring("dir      - List files\n");
-        terminal_writestring("pwd      - Print working directory\n");
-        terminal_writestring("echo     - Display message\n");
-        terminal_writestring("calc     - Simple calculator\n");
-        terminal_writestring("date     - Show current date/time\n");
-        terminal_writestring("whoami   - Show current user\n");
-        terminal_writestring("mem      - Show memory usage\n");
-        terminal_writestring("disk     - Show disk information\n");
-        terminal_writestring("opengwm  - Graphical Window Manager\n");
-        terminal_writestring("poweroff - Shut down\n");
-        terminal_writestring("reboot   - Reboot\n");
-        terminal_writestring("kptest   - Test kernel panic\n");
+        int page = 1;
+        if (arg_count > 1) {
+            page = atoi(args[1]);
+        }
+        execute_help(page);
     }
     else if (str_cmp_case_insensitive(args[0], "cls") == 0 || 
              str_cmp_case_insensitive(args[0], "clear") == 0) {
-        terminal_clear();
+        execute_cls();
     }
     else if (str_cmp_case_insensitive(args[0], "about") == 0) {
         execute_about();
@@ -911,6 +1451,12 @@ void execute_command(char* cmd) {
     else if (str_cmp_case_insensitive(args[0], "date") == 0) {
         execute_date();
     }
+    else if (str_cmp_case_insensitive(args[0], "time") == 0) {
+        execute_time();
+    }
+    else if (str_cmp_case_insensitive(args[0], "ver") == 0) {
+        execute_ver();
+    }
     else if (str_cmp_case_insensitive(args[0], "whoami") == 0) {
         execute_whoami();
     }
@@ -924,6 +1470,9 @@ void execute_command(char* cmd) {
     else if (str_cmp_case_insensitive(args[0], "disk") == 0 || 
              str_cmp_case_insensitive(args[0], "data") == 0) {
         execute_disk();
+    }
+    else if (str_cmp_case_insensitive(args[0], "pause") == 0) {
+        execute_pause();
     }
     else if (str_cmp_case_insensitive(args[0], "calc") == 0) {
         execute_calc();
@@ -939,8 +1488,21 @@ void execute_command(char* cmd) {
              str_cmp_case_insensitive(args[0], "restart") == 0) {
         execute_reboot();
     }
+    else if (str_cmp_case_insensitive(args[0], "exit") == 0) {
+        execute_exit();
+    }
     else if (str_cmp_case_insensitive(args[0], "kptest") == 0) {
         execute_kptest();
+    }
+    else if (str_cmp_case_insensitive(args[0], "ping") == 0) {
+        if (arg_count > 1) execute_ping(args[1]);
+        else terminal_writestring("\nUsage: ping <ip>\n");
+    }
+    else if (str_cmp_case_insensitive(args[0], "ifconfig") == 0) {
+        execute_ifconfig();
+    }
+    else if (str_cmp_case_insensitive(args[0], "netstat") == 0) {
+        execute_netstat();
     }
     else if (args[0][0] != '\0') {
         terminal_writestring("\nCommand not found: ");
@@ -1012,6 +1574,19 @@ void shell() {
     }
 }
 
+void kernel_panic(const char* message) {
+    terminal_setcolor(COLOR_RED, COLOR_WHITE);
+    terminal_clear();
+    
+    terminal_writestring("\n\nKERNEL PANIC!\n");
+    terminal_writestring(message);
+    terminal_writestring("\nSystem is crashed. Please restart your computer.\n");
+    
+    while (1) {
+        asm volatile ("cli; hlt");
+    }
+}
+
 void kernel_main() {
     terminal_initialize();
     wait_for_enter();
@@ -1021,8 +1596,9 @@ void kernel_main() {
     
     terminal_writestring("Initializing kernel...\n");
     init_timer();
+    net_init();
     
-    terminal_writestring("Starting shell\n\n");
+    terminal_writestring("Starting shell...\n\n");
     shell();
     
     while (1) asm volatile ("hlt");
