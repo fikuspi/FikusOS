@@ -1134,12 +1134,12 @@ void update_clock() {
 void draw_about_window() {
     Window* win = &windows[active_window];
     
-    draw_string(win->x + 2, win->y + 2, "FikusOS version 0.3 Alpha", COLOR_BLACK, COLOR_GRAY);
-    draw_string(win->x + 2, win->y + 3, "Build 2025-04-22", COLOR_BLACK, COLOR_GRAY);
+    draw_string(win->x + 2, win->y + 2, "FikusOS version 0.4 Alpha", COLOR_BLACK, COLOR_GRAY);
+    draw_string(win->x + 2, win->y + 3, "Build 2025-05-09", COLOR_BLACK, COLOR_GRAY);
     draw_string(win->x + 2, win->y + 4, "License: GNU GPL 2", COLOR_BLACK, COLOR_GRAY);
     draw_string(win->x + 2, win->y + 5, "Created for FikusPI", COLOR_BLACK, COLOR_GRAY);
     draw_string(win->x + 2, win->y + 6, "Shell: FKShell", COLOR_BLACK, COLOR_GRAY);
-    draw_string(win->x + 2, win->y + 7, "Kernel: 0.0.8-Fikus", COLOR_BLACK, COLOR_GRAY);
+    draw_string(win->x + 2, win->y + 7, "Kernel: 0.0.9-Fikus", COLOR_BLACK, COLOR_GRAY);
     
     draw_rect(win->x + win->width - 10, win->y + win->height - 2, 8, 1, COLOR_BLUE);
     draw_string(win->x + win->width - 9, win->y + win->height - 2, " OK ", COLOR_WHITE, COLOR_BLUE);
@@ -1865,8 +1865,8 @@ void execute_uptime() {
 }
 
 void execute_ver() {
-    terminal_writestring("\nFikusOS version 0.3 Alpha\n");
-    terminal_writestring("Build 2025-04-22\n");
+    terminal_writestring("\nFikusOS version 0.4 Alpha\n");
+    terminal_writestring("Build 2025-05-09\n");
 }
 
 void execute_pause() {
@@ -2019,11 +2019,11 @@ void show_ascii_art() {
 void execute_about() {
     show_ascii_art();
     terminal_writestring("OS: FikusOS\n");
-    terminal_writestring("Version: Alpha 0.3\n");
+    terminal_writestring("Version: Alpha 0.4\n");
     terminal_writestring("License: GNU GPL 2\n");
     terminal_writestring("Created for FikusPI\n");
     terminal_writestring("Shell: FKShell\n");
-    terminal_writestring("Kernel: 0.0.8-Fikus\n");
+    terminal_writestring("Kernel: 0.0.9-Fikus (srunix fork)\n");
     terminal_writestring("\n");
 }
 
@@ -2501,9 +2501,9 @@ void show_boot_screen() {
     terminal_clear();
     
     terminal_writestring("\n\n\n");
-    terminal_writestring("                           FikusOS\n");
-    terminal_writestring("                    GNU Operating System\n\n");
-    terminal_writestring("                Copyright GPL (c) 2025 FikusOS\n\n\n");
+    terminal_writestring("FikusOS\n");
+    terminal_writestring("GNU Operating System\n\n");
+    terminal_writestring("Copyright GPL (c) 2025 FikusOS\n\n\n");
     
     terminal_setcolor(COLOR_GREEN, COLOR_BLACK);
     terminal_writestring("Starting system...\n\n");
