@@ -17,3 +17,4 @@ section .bss
 stack_bottom:
     resb 16384
 stack_top:
+
