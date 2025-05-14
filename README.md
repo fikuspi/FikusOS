@@ -26,3 +26,6 @@ And much more.
 # We will be glad to any support from your side, you can take part in the development by writing to the author! Thank you for participating in the FikusOS project!
 
 ![FikusOS](https://github.com/user-attachments/assets/14af3c21-ecd2-441e-9ae9-d55ab6909b62)
+
+
+# Main developer: Fedor Shimorov
