@@ -21,7 +21,10 @@ CPU management,
 Network stack, 
 File system, 
 And much more. 
- 
+
+# Dependencies:
+LINUX - nasm gcc binutils grub-pc-bin xorriso 
+BSD - nasm gcc binutils cdrtools
  
 # We will be glad to any support from your side, you can take part in the development by writing to the author! Thank you for participating in the FikusOS project!
 
